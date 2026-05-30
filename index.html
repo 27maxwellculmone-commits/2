@@ -1,0 +1,243 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>3D Isometric Adventure</title>
+    <style>
+        body {
+            margin: 0;
+            overflow: hidden;
+            background-color: #a0c4ff;
+        }
+        canvas {
+            display: block;
+        }
+        #ui {
+            position: absolute;
+            top: 15px;
+            left: 15px;
+            color: white;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: rgba(0, 0, 0, 0.6);
+            padding: 15px;
+            border-radius: 8px;
+            pointer-events: none;
+            user-select: none;
+        }
+        h2 { margin: 0 0 5px 0; font-size: 18px; color: #ffd700; }
+        p { margin: 0; font-size: 14px; }
+    </style>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+</head>
+<body>
+
+    <div id="ui">
+        <h2>Isometric Adventure</h2>
+        <p>Use <b>W, A, S, D</b> or <b>Arrows</b> to move.</p>
+    </div>
+
+    <script>
+        // 1. SCENE SETUP
+        const scene = new THREE.Scene();
+        scene.fog = new THREE.Fog('#a0c4ff', 15, 45);
+        scene.background = new THREE.Color('#a0c4ff');
+
+        const camera = new THREE.PerspectiveCamera(45, window.innerWidth / window.innerHeight, 0.1, 100);
+        
+        const renderer = new THREE.WebGLRenderer({ antialias: true });
+        renderer.setSize(window.innerWidth, window.innerHeight);
+        renderer.shadowMap.enabled = true;
+        renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+        document.body.appendChild(renderer.domElement);
+
+        // 2. LIGHTING
+        const ambientLight = new THREE.AmbientLight(0xffffff, 0.5);
+        scene.add(ambientLight);
+
+        const dirLight = new THREE.DirectionalLight(0xffffff, 0.8);
+        dirLight.position.set(20, 30, 10);
+        dirLight.castShadow = true;
+        dirLight.shadow.camera.left = -30;
+        dirLight.shadow.camera.right = 30;
+        dirLight.shadow.camera.top = 30;
+        dirLight.shadow.camera.bottom = -30;
+        dirLight.shadow.mapSize.width = 1024;
+        dirLight.shadow.mapSize.height = 1024;
+        scene.add(dirLight);
+
+        // 3. ENVIRONMENT (Ground)
+        const groundGeo = new THREE.PlaneGeometry(100, 100);
+        const groundMat = new THREE.MeshStandardMaterial({ color: '#557a2b', roughness: 1 });
+        const ground = new THREE.Mesh(groundGeo, groundMat);
+        ground.rotation.x = -Math.PI / 2;
+        ground.receiveShadow = true;
+        scene.add(ground);
+
+        // 4. LOW POLY NATURE (Trees)
+        function createTree(x, z) {
+            const treeGroup = new THREE.Group();
+            
+            const trunkGeo = new THREE.CylinderGeometry(0.2, 0.3, 1, 5);
+            const trunkMat = new THREE.MeshStandardMaterial({ color: '#5c4033' });
+            const trunk = new THREE.Mesh(trunkGeo, trunkMat);
+            trunk.position.y = 0.5;
+            trunk.castShadow = true;
+            trunk.receiveShadow = true;
+            treeGroup.add(trunk);
+
+            const leavesGeo = new THREE.ConeGeometry(1, 2, 5);
+            const leavesMat = new THREE.MeshStandardMaterial({ color: '#2d4c1e', flatShading: true });
+            const leaves = new THREE.Mesh(leavesGeo, leavesMat);
+            leaves.position.y = 1.8;
+            leaves.castShadow = true;
+            treeGroup.add(leaves);
+
+            treeGroup.position.set(x, 0, z);
+            scene.add(treeGroup);
+        }
+
+        for (let i = 0; i < 40; i++) {
+            const tx = (Math.random() - 0.5) * 60;
+            const tz = (Math.random() - 0.5) * 60;
+            if (Math.abs(tx) > 3 && Math.abs(tz) > 3 && tz > -15) {
+                createTree(tx, tz);
+            }
+        }
+
+        // 5. THE CASTLE (On the horizon)
+        const castleGroup = new THREE.Group();
+        const stoneMat = new THREE.MeshStandardMaterial({ color: '#888888', roughness: 0.8 });
+        const roofMat = new THREE.MeshStandardMaterial({ color: '#4a0e17', flatShading: true });
+
+        const keep = new THREE.Mesh(new THREE.BoxGeometry(4, 5, 4), stoneMat);
+        keep.position.y = 2.5;
+        keep.castShadow = true;
+        castleGroup.add(keep);
+
+        const towerGeo = new THREE.CylinderGeometry(1, 1, 7, 6);
+        const roofGeo = new THREE.ConeGeometry(1.2, 2, 6);
+        
+        const positions = [[-2, -2], [2, -2], [-2, 2], [2, 2]];
+        positions.forEach(pos => {
+            const tower = new THREE.Mesh(towerGeo, stoneMat);
+            tower.position.set(pos[0], 3.5, pos[1]);
+            tower.castShadow = true;
+            
+            const roof = new THREE.Mesh(roofGeo, roofMat);
+            roof.position.set(pos[0], 8, pos[1]);
+            castleGroup.add(tower);
+            castleGroup.add(roof);
+        });
+
+        castleGroup.position.set(0, 0, -25);
+        scene.add(castleGroup);
+
+        // 6. THE CHARACTER (Voxel Person)
+        const player = new THREE.Group();
+
+        // Materials
+        const skinMat = new THREE.MeshStandardMaterial({ color: '#f1c27d' });
+        const shirtMat = new THREE.MeshStandardMaterial({ color: '#2980b9' });
+        const pantsMat = new THREE.MeshStandardMaterial({ color: '#2c3e50' });
+
+        // Head
+        const head = new THREE.Mesh(new THREE.BoxGeometry(0.6, 0.6, 0.6), skinMat);
+        head.position.y = 1.7;
+        head.castShadow = true;
+        player.add(head);
+
+        // Body
+        const body = new THREE.Mesh(new THREE.BoxGeometry(0.8, 0.9, 0.4), shirtMat);
+        body.position.y = 0.95;
+        body.castShadow = true;
+        player.add(body);
+
+        // Legs (Separated for walking animation)
+        const leftLeg = new THREE.Mesh(new THREE.BoxGeometry(0.35, 0.6, 0.35), pantsMat);
+        leftLeg.position.set(-0.2, 0.3, 0);
+        leftLeg.castShadow = true;
+        player.add(leftLeg);
+
+        const rightLeg = new THREE.Mesh(new THREE.BoxGeometry(0.35, 0.6, 0.35), pantsMat);
+        rightLeg.position.set(0.2, 0.3, 0);
+        rightLeg.castShadow = true;
+        player.add(rightLeg);
+
+        scene.add(player);
+
+        // 7. CONTROLS & MOVEMENT
+        const keys = { w: false, a: false, s: false, d: false, ArrowUp: false, ArrowDown: false, ArrowLeft: false, ArrowRight: false };
+        const speed = 0.15; // Slightly faster
+
+        window.addEventListener('keydown', (e) => { 
+            const key = e.key.toLowerCase();
+            if(keys.hasOwnProperty(key)) keys[key] = true; 
+            if(keys.hasOwnProperty(e.key)) keys[e.key] = true;
+        });
+        window.addEventListener('keyup', (e) => { 
+            const key = e.key.toLowerCase();
+            if(keys.hasOwnProperty(key)) keys[key] = false; 
+            if(keys.hasOwnProperty(e.key)) keys[e.key] = false;
+        });
+
+        const cameraOffset = new THREE.Vector3(10, 12, 10);
+
+        // 8. ANIMATION LOOP
+        function animate() {
+            requestAnimationFrame(animate);
+
+            // Isometric Movement Vector Logic
+            const moveVector = new THREE.Vector3(0, 0, 0);
+
+            if (keys.w || keys.ArrowUp) { moveVector.x -= 1; moveVector.z -= 1; }
+            if (keys.s || keys.ArrowDown) { moveVector.x += 1; moveVector.z += 1; }
+            if (keys.a || keys.ArrowLeft) { moveVector.x -= 1; moveVector.z += 1; }
+            if (keys.d || keys.ArrowRight) { moveVector.x += 1; moveVector.z -= 1; }
+
+            // If the player is moving
+            if (moveVector.lengthSq() > 0) {
+                // Normalize to prevent faster diagonal movement
+                moveVector.normalize();
+                
+                player.position.x += moveVector.x * speed;
+                player.position.z += moveVector.z * speed;
+
+                // Make character face the direction of movement
+                const targetAngle = Math.atan2(moveVector.x, moveVector.z);
+                player.rotation.y = targetAngle;
+
+                // Walking Animation (Swinging legs)
+                const time = Date.now() * 0.015;
+                leftLeg.position.z = Math.sin(time) * 0.25;
+                rightLeg.position.z = -Math.sin(time) * 0.25;
+                
+                // Slight body bobbing
+                body.position.y = 0.95 + Math.abs(Math.sin(time)) * 0.05;
+                head.position.y = 1.7 + Math.abs(Math.sin(time)) * 0.05;
+            } else {
+                // Reset legs and body when standing still
+                leftLeg.position.z = 0;
+                rightLeg.position.z = 0;
+                body.position.y = 0.95;
+                head.position.y = 1.7;
+            }
+
+            // Smooth camera follow
+            const targetCamPos = player.position.clone().add(cameraOffset);
+            camera.position.lerp(targetCamPos, 0.1);
+            camera.lookAt(player.position);
+
+            renderer.render(scene, camera);
+        }
+
+        window.addEventListener('resize', () => {
+            camera.aspect = window.innerWidth / window.innerHeight;
+            camera.updateProjectionMatrix();
+            renderer.setSize(window.innerWidth, window.innerHeight);
+        });
+
+        animate();
+    </script>
+</body>
+</html>
